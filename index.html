@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MedBot Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room console — map stage + telemetry rail on top, scope charts below, then results, motor sizing and the model. */
+:root{
+  --bg:#0c1719; --bg2:#0f1e20; --panel:#132628; --panel2:#18302f; --line:#2a4442; --line2:#365652;
+  --ink:#ece7dc; --muted:#93a8a3; --gold:#c9b48a; --mint:#8fc7b1; --red:#e8776b; --blue:#7f9fe0;
+  --display:"Chakra Petch", "Arial Narrow", Arial, sans-serif;
+  --body:"IBM Plex Sans", "Segoe UI", Roboto, Arial, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:0 40px;
+  background-image:radial-gradient(1200px 600px at 20% -10%, #1c3b39 0%, transparent 60%)}
+.wrap{max-width:1280px;margin:0 auto}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding-block:18px 14px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.brand h1{font-family:var(--display);font-weight:700;font-size:28px;letter-spacing:.06em;margin:0}
+.brand h1 span{color:var(--gold)}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.who{font-size:12px;color:var(--muted);text-align:right;letter-spacing:.04em}
+.who b{color:var(--ink);font-weight:600}
+.eyebrow{font-family:var(--display);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:600}
+h2{font-family:var(--display);font-weight:600;font-size:20px;letter-spacing:.04em;margin:0 0 4px;text-wrap:balance}
+.sec{margin-top:28px}
+.sec-head{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.sec-head p{margin:0;color:var(--muted);max-width:62ch;font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.grid-main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:16px;margin-top:18px;align-items:start}
+@media (max-width:980px){.grid-main{grid-template-columns:1fr}}
+.stage{position:relative;padding:10px}
+.stage canvas{width:100%;height:auto;display:block;border-radius:8px;background:var(--bg2)}
+.hud{position:absolute;left:22px;top:20px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.pill{font-family:var(--display);font-size:12px;letter-spacing:.1em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);background:rgba(12,23,25,.85);color:var(--ink)}
+.pill.go{border-color:var(--gold);color:var(--gold)}
+.pill.wait{border-color:var(--mint);color:var(--mint)}
+.pill.done{background:var(--gold);color:#13201f;border-color:var(--gold)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:8px 4px 2px}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.rail{display:flex;flex-direction:column;gap:14px}
+.ctl-row{display:flex;flex-direction:column;gap:6px}
+.ctl-row label,.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:0}
+button{font-family:var(--display);font-weight:600;letter-spacing:.06em;font-size:13px;color:var(--ink);background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color .15s, background .15s}
+button:hover{border-color:var(--gold)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+button.on{background:var(--gold);color:#13201f;border-color:var(--gold)}
+button.primary{background:transparent;border:2px solid var(--gold);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--gold)}
+.tele{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tv{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.tv .k{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tv .v{font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tv .v small{font-size:11px;color:var(--muted);margin-left:3px}
+.tv.hl{border-color:var(--gold)}
+.progress{height:6px;background:var(--bg2);border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.progress div{height:100%;width:0;background:linear-gradient(90deg,var(--mint),var(--gold))}
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:760px){.charts{grid-template-columns:1fr}}
+.chart h3{font-family:var(--display);font-size:14px;letter-spacing:.06em;margin:0 0 2px;font-weight:600}
+.chart .sub{font-size:12px;color:var(--muted);margin:0 0 6px}
+.chart canvas{width:100%;height:190px;display:block}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi .n{font-family:var(--display);font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .n small{font-size:14px;color:var(--muted);font-weight:500;margin-left:4px}
+.kpi .c{font-size:12px;color:var(--muted)}
+.kpi.accent{border-color:var(--gold)}
+.two{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;margin-top:14px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+th.num{text-align:right}
+.chev{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:6px 0 12px}
+@media (max-width:560px){.chev{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.chev div{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px}
+.chev .k{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.chev .v{font-family:var(--mono);font-size:16px}
+.pick{border:2px solid var(--gold);border-radius:10px;padding:12px 14px;background:#1b2a22}
+.pick .big{font-family:var(--display);font-size:22px;font-weight:700}
+.bars{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.bar{display:grid;grid-template-columns:110px minmax(0,1fr) 70px;gap:10px;align-items:center;font-size:13px}
+.bar .t{height:12px;background:var(--bg2);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bar .t div{height:100%;border-radius:6px}
+.bar .num{font-family:var(--mono);text-align:right}
+.model{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+@media (max-width:900px){.model{grid-template-columns:1fr}}
+.eq{font-family:"Cambria","Times New Roman",serif;font-style:italic;font-size:15px;line-height:1.9;background:var(--bg2);border:1px dashed var(--line2);border-radius:8px;padding:8px 12px;overflow-x:auto}
+.eq b{font-style:normal;font-family:var(--display);font-size:11px;letter-spacing:.1em;color:var(--gold);margin-right:8px}
+.specs{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:13px}
+.specs div{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding-block:5px}
+.specs span:last-child{font-family:var(--mono);color:var(--ink)}
+.specs span:first-child{color:var(--muted)}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;margin-top:10px}
+.flow span{border:1px solid var(--line2);border-radius:6px;padding:4px 8px;background:var(--bg2)}
+.flow em{color:var(--gold);font-style:normal}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header class="top">
+  <div class="brand">
+    <h1>MED<span>BOT</span></h1>
+    <p>Autonomous hospital medicine delivery robot · differential-drive simulation</p>
+  </div>
+  <div class="who"><b>DHANYAASRI M</b> · CH.AI.U4AID25063<br>23AID202 Introduction to Robotics · Dr. Shakti P Jena</div>
+</header>
+
+<div class="grid-main">
+  <div class="card stage">
+    <canvas id="map" width="1000" height="600" aria-label="Hospital floor map with robot"></canvas>
+    <div class="hud"><span class="pill go" id="phasePill">Going to ward</span><span class="pill" id="timePill">t = 0.0 s</span></div>
+    <div class="legend">
+      <span><i style="background:var(--blue)"></i>A* path to ward</span>
+      <span><i style="background:var(--mint)"></i>A* return path</span>
+      <span><i style="background:var(--red)"></i>Actual trajectory</span>
+      <span><i style="background:var(--gold);height:8px;width:8px;border-radius:50%"></i>Look-ahead point</span>
+      <span><i style="background:#2f4a46;height:8px"></i>0.3 m wall inflation</span>
+    </div>
+  </div>
+
+  <aside class="rail">
+    <div class="card ctl-row" style="gap:10px">
+      <span class="eyebrow">Mission control</span>
+      <div class="ctl-row"><label>Destination ward</label>
+        <div class="seg" id="wardSeg"><button data-w="A">Ward A</button><button data-w="B" class="on">Ward B</button><button data-w="C">Ward C</button></div></div>
+      <div class="ctl-row"><label>Path-tracking controller</label>
+        <div class="seg" id="ctlSeg"><button data-c="pp" class="on">Pure Pursuit</button><button data-c="pid">PID heading</button></div></div>
+      <div class="ctl-row"><label>Payload shown</label>
+        <div class="seg" id="paySeg"><button data-p="0">Empty 25 kg</button><button data-p="1" class="on">Loaded 35 kg</button></div></div>
+      <div class="ctl-row"><label for="spd">Playback speed · <span id="spdV">2×</span></label>
+        <input type="range" id="spd" min="0.5" max="8" step="0.5" value="2"></div>
+      <div class="seg"><button class="primary" id="playBtn">Pause</button><button id="resetBtn">Restart</button></div>
+      <div class="progress" aria-hidden="true"><div id="prog"></div></div>
+    </div>
+    <div class="card">
+      <span class="eyebrow">Live telemetry</span>
+      <div class="tele" style="margin-top:8px">
+        <div class="tv"><div class="k">Linear v</div><div class="v" id="tV">0.00<small>m/s</small></div></div>
+        <div class="tv"><div class="k">Angular ω</div><div class="v" id="tW">0.00<small>rad/s</small></div></div>
+        <div class="tv"><div class="k">Left wheel ω<sub>L</sub></div><div class="v" id="tWL">0.0<small>rad/s</small></div></div>
+        <div class="tv"><div class="k">Right wheel ω<sub>R</sub></div><div class="v" id="tWR">0.0<small>rad/s</small></div></div>
+        <div class="tv hl"><div class="k">Torque τ<sub>L</sub></div><div class="v" id="tTL">0.00<small>N·m</small></div></div>
+        <div class="tv hl"><div class="k">Torque τ<sub>R</sub></div><div class="v" id="tTR">0.00<small>N·m</small></div></div>
+        <div class="tv"><div class="k">Pose x, y</div><div class="v" id="tXY">0.0, 0.0</div></div>
+        <div class="tv"><div class="k">Heading θ</div><div class="v" id="tTh">0°</div></div>
+        <div class="tv"><div class="k">Tracking error</div><div class="v" id="tE">0.000<small>m</small></div></div>
+        <div class="tv"><div class="k">Distance driven</div><div class="v" id="tD">0.0<small>m</small></div></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<section class="sec">
+  <div class="sec-head"><div><span class="eyebrow">Analysis</span><h2>Live plots</h2></div><p>Full-mission curves with a gold cursor at the current playback time. Torque uses inverse dynamics on the same motion for both masses.</p></div>
+  <div class="charts">
+    <div class="card chart"><h3>Tracking error vs time</h3><p class="sub">Distance from robot to the planned path (m)</p><canvas id="cErr"></canvas></div>
+    <div class="card chart"><h3>Wheel angular velocities</h3><p class="sub">ω<sub>L</sub> and ω<sub>R</sub> (rad/s) · limit ±10</p><canvas id="cWh"></canvas></div>
+    <div class="card chart"><h3>Linear and angular velocity</h3><p class="sub">v (m/s) and ω (rad/s)</p><canvas id="cVW"></canvas></div>
+    <div class="card chart"><h3>Right motor torque: empty vs loaded</h3><p class="sub">τ<sub>R</sub> (N·m) for 25 kg and 35 kg</p><canvas id="cTq"></canvas></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="sec-head"><div><span class="eyebrow">Results</span><h2>Mission summary</h2></div><p id="sumNote">Ward B round trip with Pure Pursuit.</p></div>
+  <div class="kpis">
+    <div class="card kpi"><div class="n" id="kT">–<small>s</small></div><div class="c">Round trip incl. 3 s delivery</div></div>
+    <div class="card kpi"><div class="n" id="kL">–<small>m</small></div><div class="c">Planned path, both legs</div></div>
+    <div class="card kpi"><div class="n" id="kE">–<small>cm</small></div><div class="c">RMS tracking error</div></div>
+    <div class="card kpi accent"><div class="n" id="kC" style="color:var(--gold)">–</div><div class="c">Wall collisions</div></div>
+  </div>
+  <div class="two">
+    <div class="card">
+      <span class="eyebrow">Full results</span>
+      <div style="overflow-x:auto;margin-top:6px"><table id="resTbl"></table></div>
+    </div>
+    <div class="card">
+      <span class="eyebrow">Controller comparison · leg 1</span>
+      <p class="note" style="margin-top:4px">Both controllers steer toward the same 0.7 m look-ahead point under the same limits.</p>
+      <div class="bars" id="cmpBars"></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="sec-head"><div><span class="eyebrow">Mechanical part</span><h2>Motor selection from this run</h2></div><p>Computed from the loaded robot's simulated peak torque and wheel speed, with a 1.5 safety factor.</p></div>
+  <div class="card">
+    <div class="chev" id="chev"></div>
+    <div class="pick"><span class="eyebrow">Selected motor</span><div class="big" id="pickTxt">–</div><div class="note" id="pickNote" style="margin-top:2px"></div></div>
+  </div>
+</section>
+
+<section class="sec">
+  <div class="sec-head"><div><span class="eyebrow">Model</span><h2>Robot, kinematics and dynamics</h2></div><p>The equations the simulator runs every 0.05 s.</p></div>
+  <div class="model">
+    <div class="card">
+      <span class="eyebrow">Mechanical design</span>
+      <div class="specs" style="margin-top:8px">
+        <div><span>Wheel radius r</span><span>0.075 m</span></div><div><span>Wheelbase L</span><span>0.40 m</span></div>
+        <div><span>Body</span><span>0.50×0.45 m</span></div><div><span>Mass</span><span>25 + 10 kg</span></div>
+        <div><span>Wheel inertia</span><span>0.0028 kg·m²</span></div><div><span>Caster</span><span>passive</span></div>
+        <div><span>v max</span><span>0.6 m/s</span></div><div><span>ω max</span><span>1.2 rad/s</span></div>
+        <div><span>a max</span><span>0.4 m/s²</span></div><div><span>Wheel max</span><span>10 rad/s</span></div>
+      </div>
+      <p class="note">Aluminium chassis, two DC geared motors with encoders, closed 10 kg tray, battery and motor driver.</p>
+    </div>
+    <div class="card">
+      <span class="eyebrow">Kinematics</span>
+      <div class="eq" style="margin-top:8px"><b>FK</b>v = r(ω<sub>R</sub>+ω<sub>L</sub>)/2 &nbsp; ω = r(ω<sub>R</sub>−ω<sub>L</sub>)/L<br><b>IK</b>v<sub>R</sub> = v + ωL/2 &nbsp; v<sub>L</sub> = v − ωL/2<br><b>POSE</b>ẋ = v cos θ &nbsp; ẏ = v sin θ &nbsp; θ̇ = ω</div>
+      <p class="note">Non-holonomic: ẋ sin θ − ẏ cos θ = 0, so the robot turns on the spot when the path is behind it.</p>
+    </div>
+    <div class="card">
+      <span class="eyebrow">Dynamics · Euler–Lagrange</span>
+      <div class="eq" style="margin-top:8px">T = ½mv² + ½I<sub>b</sub>ω² + ½I<sub>w</sub>(φ̇<sub>R</sub>²+φ̇<sub>L</sub>²)<br>M<sub>eff</sub> v̇ = (τ<sub>R</sub>+τ<sub>L</sub>)/r − F<sub>rr</sub><br>I<sub>eff</sub> ω̇ = (τ<sub>R</sub>−τ<sub>L</sub>)L / 2r</div>
+      <p class="note">M<sub>eff</sub> = m + 2I<sub>w</sub>/r², F<sub>rr</sub> = 0.02·m·g.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <span class="eyebrow">Simulation loop</span>
+    <div class="flow"><span>Hospital map</span><em>→</em><span>Inflate walls 0.3 m</span><em>→</em><span>A* (8-neighbour)</span><em>→</em><span>Resample 5 cm</span><em>→</em><span>Pure Pursuit / PID</span><em>→</em><span>v, ω and accel. limits</span><em>→</em><span>IK + wheel limit</span><em>→</em><span>FK + Euler pose</span><em>→</em><span>Inverse dynamics τ</span><em>↺ every 0.05 s</em></div>
+  </div>
+</section>
+
+<footer><span>MedBot · simulation of the MATLAB capstone model, rebuilt for the browser</span><span>Amrita School of Engineering, Chennai · 2026</span></footer>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------------- parameters (same as parameters.m) ----------------
+const P = { r:0.075, L:0.40, bl:0.50, bw:0.45, mE:25, mP:10, mw:1.0, crr:0.02, g:9.81,
+  vmax:0.6, wmax:1.2, amax:0.4, almax:1.5, whmax:10, Ld:0.7, tol:0.15, Kp:2.0, Ki:0, Kd:0.1,
+  res:0.25, infl:0.30, dt:0.05, tDel:3 };
+P.Iw = 0.5*P.mw*P.r*P.r;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ---------------- map (map_setup.m) ----------------
+const W=20, H=12, nx=W/P.res, ny=H/P.res;
+const occ = new Uint8Array(nx*ny), inf = new Uint8Array(nx*ny);
+const cx = i => (i+0.5)*P.res;
+function box(x1,x2,y1,y2){ for(let r=0;r<ny;r++)for(let c=0;c<nx;c++){const X=cx(c),Y=cx(r); if(X>=x1&&X<=x2&&Y>=y1&&Y<=y2) occ[r*nx+c]=1;} }
+box(0,W,0,0.25); box(0,W,H-0.25,H); box(0,0.25,0,H); box(W-0.25,W,0,H);
+box(0,2,4.8,5.2); box(4,W,4.8,5.2); box(4.8,5.2,0,5);
+box(0,6,7.3,7.7); box(8,12,7.3,7.7); box(14,17,7.3,7.7); box(19,W,7.3,7.7);
+box(9.3,9.7,7.5,H); box(15.3,15.7,7.5,H);
+const k=Math.ceil(P.infl/P.res);
+for(let r=0;r<ny;r++)for(let c=0;c<nx;c++){ if(!occ[r*nx+c])continue;
+  for(let dr=-k;dr<=k;dr++)for(let dc=-k;dc<=k;dc++){ if(dr*dr+dc*dc>k*k)continue; const rr=r+dr,cc=c+dc; if(rr>=0&&rr<ny&&cc>=0&&cc<nx) inf[rr*nx+cc]=1; } }
+const PHARM=[3,2.5], WARDS={A:[7,10],B:[13,10],C:[18,10]};
+
+// ---------------- A* planner (planner.m) ----------------
+function astar(s,g){
+  const rc=p=>[Math.min(ny-1,Math.floor(p[1]/P.res)),Math.min(nx-1,Math.floor(p[0]/P.res))];
+  const [sr,sc]=rc(s),[gr,gc]=rc(g); const si=sr*nx+sc, gi=gr*nx+gc;
+  const G=new Float64Array(nx*ny).fill(Infinity), par=new Int32Array(nx*ny).fill(-1), closed=new Uint8Array(nx*ny);
+  const heap=[]; const push=(f,i)=>{heap.push([f,i]);let j=heap.length-1;while(j>0){const p=(j-1)>>1;if(heap[p][0]<=heap[j][0])break;[heap[p],heap[j]]=[heap[j],heap[p]];j=p;}};
+  const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let j=0;for(;;){const l=2*j+1,r=l+1;let m=j;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===j)break;[heap[m],heap[j]]=[heap[j],heap[m]];j=m;}}return top;};
+  const h=(r,c)=>Math.hypot(r-gr,c-gc);
+  G[si]=0; push(h(sr,sc),si);
+  const mv=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+  while(heap.length){ const [,cur]=pop(); if(closed[cur])continue; if(cur===gi)break; closed[cur]=1;
+    const r=Math.floor(cur/nx), c=cur%nx;
+    for(let q=0;q<8;q++){ const rr=r+mv[q][0], cc=c+mv[q][1]; if(rr<0||rr>=ny||cc<0||cc>=nx)continue; const ni=rr*nx+cc; if(inf[ni]||closed[ni])continue;
+      if(q>3&&(inf[r*nx+cc]||inf[rr*nx+c]))continue; const ng=G[cur]+Math.hypot(mv[q][0],mv[q][1]);
+      if(ng<G[ni]){G[ni]=ng;par[ni]=cur;push(ng+h(rr,cc),ni);} } }
+  const list=[gi]; while(par[list[0]]>=0) list.unshift(par[list[0]]);
+  const pts=list.map(i=>[cx(i%nx),cx(Math.floor(i/nx))]); pts[0]=s.slice(); pts[pts.length-1]=g.slice();
+  // resample every 5 cm
+  const d=[0]; for(let i=1;i<pts.length;i++) d.push(d[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+  const out=[]; let j=0; for(let s2=0;s2<d[d.length-1];s2+=0.05){ while(d[j+1]<s2)j++; const t=(s2-d[j])/(d[j+1]-d[j]); out.push([pts[j][0]+t*(pts[j+1][0]-pts[j][0]),pts[j][1]+t*(pts[j+1][1]-pts[j][1])]); }
+  out.push(g.slice()); return {pts:out,len:d[d.length-1]};
+}
+
+// ---------------- kinematics & dynamics ----------------
+const ik=(v,w)=>[(v-w*P.L/2)/P.r,(v+w*P.L/2)/P.r];
+const fk=(wl,wr)=>[P.r*(wr+wl)/2,P.r*(wr-wl)/P.L];
+function invDyn(vd,wd,v,m){ const Meff=m+2*P.Iw/(P.r*P.r), Ib=m*(P.bl*P.bl+P.bw*P.bw)/12, Ieff=Ib+P.Iw*P.L*P.L/(2*P.r*P.r);
+  const Frr=P.crr*m*P.g*Math.sign(v), Fx=Meff*vd+Frr, Mz=Ieff*wd; return [P.r/2*(Fx-2*Mz/P.L),P.r/2*(Fx+2*Mz/P.L)]; }
+const wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
+
+// ---------------- controller (controller.m) ----------------
+function control(mode,pose,path,st){
+  const [x,y,th]=pose, n=path.length; let best=st.idx, bd=Infinity;
+  for(let i=st.idx;i<Math.min(n,st.idx+21);i++){const d=Math.hypot(path[i][0]-x,path[i][1]-y);if(d<bd){bd=d;best=i;}} st.idx=best;
+  let j=best; while(j<n-1&&Math.hypot(path[j][0]-x,path[j][1]-y)<P.Ld) j++;
+  const look=path[j], dx=look[0]-x, dy=look[1]-y; const al=wrap(Math.atan2(dy,dx)-th), Lact=Math.max(Math.hypot(dx,dy),1e-3);
+  const dg=Math.hypot(path[n-1][0]-x,path[n-1][1]-y); let v=Math.min(P.vmax*Math.max(Math.cos(al),0),0.8*dg), w;
+  if(mode==='pp') w=v*2*Math.sin(al)/Lact; else { st.int+=al*P.dt; const de=(al-st.prev)/P.dt; st.prev=al; w=P.Kp*al+P.Ki*st.int+P.Kd*de; }
+  if(Math.abs(al)>Math.PI/2){v=0;w=1.5*al;} return {v,w,look};
+}
+const clamp=(a,lo,hi)=>Math.max(lo,Math.min(hi,a));
+const isWall=(x,y)=>{const c=Math.floor(x/P.res),r=Math.floor(y/P.res);return r<0||r>=ny||c<0||c>=nx||occ[r*nx+c];};
+
+function runLeg(path,mode,state,log,phase){
+  const st={idx:0,int:0,prev:0}; const tEnd=state.t+300;
+  while(Math.hypot(state.pose[0]-path[path.length-1][0],state.pose[1]-path[path.length-1][1])>P.tol && state.t<tEnd){
+    const c=control(mode,state.pose,path,st);
+    let v=clamp(c.v,-P.vmax,P.vmax), w=clamp(c.w,-P.wmax,P.wmax);
+    v=state.v+clamp(v-state.v,-P.amax*P.dt,P.amax*P.dt); w=state.w+clamp(w-state.w,-P.almax*P.dt,P.almax*P.dt);
+    let wh=ik(v,w); const s=Math.max(Math.abs(wh[0]),Math.abs(wh[1]))/P.whmax; if(s>1) wh=[wh[0]/s,wh[1]/s];
+    [v,w]=fk(wh[0],wh[1]);
+    const al=(v-state.v)/P.dt, aw=(w-state.w)/P.dt;
+    const [x,y,th]=state.pose; state.pose=[x+v*Math.cos(th)*P.dt,y+v*Math.sin(th)*P.dt,wrap(th+w*P.dt)]; state.t+=P.dt;
+    let err=Infinity; for(const p of path){const d=Math.hypot(p[0]-state.pose[0],p[1]-state.pose[1]); if(d<err)err=d;}
+    state.dist+=Math.abs(v)*P.dt; if(isWall(state.pose[0],state.pose[1])) state.hits++;
+    log.push({t:state.t,x:state.pose[0],y:state.pose[1],th:state.pose[2],v,w,wl:wh[0],wr:wh[1],err,phase,look:c.look,
+      tE:invDyn(al,aw,v,P.mE),tF:invDyn(al,aw,v,P.mE+P.mP),dist:state.dist});
+    state.v=v; state.w=w;
+  }
+}
+function mission(ward,mode){
+  const go=astar(PHARM,WARDS[ward]), back=astar(WARDS[ward],PHARM);
+  const state={pose:[PHARM[0],PHARM[1],Math.PI/2],v:0,w:0,t:0,dist:0,hits:0}; const log=[];
+  runLeg(go.pts,mode,state,log,1); const tArr=state.t; state.v=0; state.w=0;
+  for(let i=0;i<Math.round(P.tDel/P.dt);i++){state.t+=P.dt; log.push(Object.assign({},log[log.length-1],{t:state.t,v:0,w:0,wl:0,wr:0,phase:2,tE:[0,0],tF:[0,0]}));}
+  runLeg(back.pts,mode,state,log,3);
+  return {go,back,log,tArr,hits:state.hits,ward,mode};
+}
+
+// ---------------- stats ----------------
+const rms=a=>Math.sqrt(a.reduce((s,x)=>s+x*x,0)/Math.max(1,a.length));
+function stats(M){ const L=M.log, mv=L.filter(e=>e.phase!==2);
+  const tE=L.flatMap(e=>e.tE), tF=L.flatMap(e=>e.tF);
+  return { T:L[L.length-1].t, tArr:M.tArr, lenPlan:M.go.len+M.back.len, lenAct:L[L.length-1].dist,
+    rmsE:rms(mv.map(e=>e.err)), maxE:Math.max(...L.map(e=>e.err)), pkE:Math.max(...tE.map(Math.abs)), pkF:Math.max(...tF.map(Math.abs)),
+    rmsTE:rms(tE), rmsTF:rms(tF), wmax:Math.max(...L.map(e=>Math.max(Math.abs(e.wl),Math.abs(e.wr)))), hits:M.hits,
+    leg1:rms(L.filter(e=>e.phase===1).map(e=>e.err)) }; }
+
+// ---------------- drawing: map ----------------
+const mapC=document.getElementById('map'), mx=mapC.getContext('2d');
+const S=mapC.width/W, toPx=(x,y)=>[x*S,mapC.height-y*S];
+let base=null;
+function drawBase(){
+  const off=document.createElement('canvas'); off.width=mapC.width; off.height=mapC.height; const c=off.getContext('2d');
+  c.fillStyle=css('--bg2'); c.fillRect(0,0,off.width,off.height);
+  c.strokeStyle='rgba(147,168,163,0.07)'; c.lineWidth=1;
+  for(let x=0;x<=W;x++){c.beginPath();c.moveTo(x*S,0);c.lineTo(x*S,off.height);c.stroke();}
+  for(let y=0;y<=H;y++){c.beginPath();c.moveTo(0,y*S);c.lineTo(off.width,y*S);c.stroke();}
+  for(let r=0;r<ny;r++)for(let q=0;q<nx;q++){ const i=r*nx+q; if(!inf[i])continue; const [px,py]=toPx(q*P.res,(r+1)*P.res);
+    c.fillStyle=occ[i]?css('--gold'):'#2f4a46'; c.globalAlpha=occ[i]?0.9:0.55; c.fillRect(px,py,P.res*S+0.5,P.res*S+0.5); }
+  c.globalAlpha=1; c.fillStyle=css('--muted'); c.font='600 15px '+css('--display'); c.textAlign='center';
+  const lab=[['PHARMACY',2.6,1.0],['WARD A',4.8,11.2],['WARD B',12.4,11.2],['WARD C',17.5,11.2],['CORRIDOR',10.5,6.15],['OTHER ROOMS',12.5,2.5]];
+  lab.forEach(([t,x,y])=>{const [px,py]=toPx(x,y);c.fillText(t,px,py);});
+  const mark=(p,t,col)=>{const [px,py]=toPx(p[0],p[1]);c.strokeStyle=col;c.lineWidth=2;c.beginPath();c.arc(px,py,9,0,7);c.stroke();c.fillStyle=col;c.font='600 11px '+css('--display');c.fillText(t,px,py-14);};
+  mark(PHARM,'START',css('--mint')); Object.entries(WARDS).forEach(([k,p])=>mark(p,k===cur.ward?'GOAL':k,k===cur.ward?css('--gold'):css('--muted')));
+  const path=(pts,col)=>{c.strokeStyle=col;c.lineWidth=2;c.setLineDash([7,6]);c.beginPath();pts.forEach((p,i)=>{const [a,b]=toPx(p[0],p[1]);i?c.lineTo(a,b):c.moveTo(a,b);});c.stroke();c.setLineDash([]);};
+  path(M.go.pts,css('--blue')); path(M.back.pts,css('--mint'));
+  base=off;
+}
+function drawRobot(e){
+  const [px,py]=toPx(e.x,e.y); mx.save(); mx.translate(px,py); mx.rotate(-e.th);
+  const l=P.bl*S, w=P.bw*S; mx.fillStyle='#1d3836'; mx.strokeStyle=css('--ink'); mx.lineWidth=2;
+  mx.beginPath(); mx.roundRect(-l/2,-w/2,l,w,6); mx.fill(); mx.stroke();
+  mx.fillStyle=css('--gold'); mx.fillRect(-0.09*S,-w/2-5,0.18*S,6); mx.fillRect(-0.09*S,w/2-1,0.18*S,6);
+  mx.strokeStyle=css('--muted'); mx.lineWidth=1.5; mx.beginPath(); mx.arc(-l/2+8,0,4,0,7); mx.stroke();
+  mx.strokeStyle=css('--gold'); mx.lineWidth=3; mx.beginPath(); mx.moveTo(0,0); mx.lineTo(l*0.85,0); mx.stroke();
+  mx.beginPath(); mx.moveTo(l*0.85+6,0); mx.lineTo(l*0.85-3,-5); mx.lineTo(l*0.85-3,5); mx.closePath(); mx.fillStyle=css('--gold'); mx.fill();
+  mx.restore();
+}
+function drawMap(i){
+  mx.drawImage(base,0,0); const L=M.log;
+  mx.strokeStyle=css('--red'); mx.lineWidth=2.5; mx.beginPath();
+  for(let j=0;j<=i;j++){const [a,b]=toPx(L[j].x,L[j].y); j?mx.lineTo(a,b):mx.moveTo(a,b);} mx.stroke();
+  const e=L[i]; if(e.phase!==2){const [lx,ly]=toPx(e.look[0],e.look[1]); mx.fillStyle=css('--gold'); mx.beginPath(); mx.arc(lx,ly,5,0,7); mx.fill();}
+  drawRobot(e);
+}
+
+// ---------------- drawing: charts ----------------
+function setupCanvas(cv){ const d=window.devicePixelRatio||1, r=cv.getBoundingClientRect(); cv.width=Math.max(10,r.width*d); cv.height=Math.max(10,r.height*d); const c=cv.getContext('2d'); c.setTransform(d,0,0,d,0,0); return [c,r.width,r.height]; }
+function niceTicks(lo,hi,n=4){ const span=hi-lo||1, step0=span/n, mag=Math.pow(10,Math.floor(Math.log10(step0))); const step=[1,2,2.5,5,10].map(m=>m*mag).find(s=>s>=step0); const t=[]; for(let v=Math.ceil(lo/step)*step;v<=hi+1e-9;v+=step) t.push(+v.toFixed(6)); return {t,step}; }
+const chartImgs={};
+function drawChart(id,series,yr,cursor){
+  const cv=document.getElementById(id); if(!chartImgs[id]){
+    const [c,w,h]=setupCanvas(cv); const pl=42,pr=10,pt=8,pb=24, tmax=M.log[M.log.length-1].t;
+    let lo=yr?yr[0]:Infinity, hi=yr?yr[1]:-Infinity; if(!yr) series.forEach(s=>s.d.forEach(v=>{lo=Math.min(lo,v);hi=Math.max(hi,v);}));
+    const pad=(hi-lo)*0.08||0.1; if(!yr){lo-=pad;hi+=pad;} const {t:yt}=niceTicks(lo,hi);
+    const X=t=>pl+t/tmax*(w-pl-pr), Y=v=>pt+(1-(v-lo)/(hi-lo))*(h-pt-pb);
+    c.font='11px '+css('--mono'); c.fillStyle=css('--muted'); c.strokeStyle='rgba(147,168,163,0.12)'; c.lineWidth=1; c.textAlign='right';
+    yt.forEach(v=>{c.beginPath();c.moveTo(pl,Y(v));c.lineTo(w-pr,Y(v));c.stroke();c.fillText(+v.toFixed(2),pl-6,Y(v)+4);});
+    c.textAlign='center'; niceTicks(0,tmax,5).t.forEach(v=>{c.fillText(v+'s',X(v),h-6);});
+    if(lo<0&&hi>0){c.strokeStyle='rgba(147,168,163,0.35)';c.beginPath();c.moveTo(pl,Y(0));c.lineTo(w-pr,Y(0));c.stroke();}
+    // delivery band
+    const L=M.log; const d0=L.find(e=>e.phase===2), d1=[...L].reverse().find(e=>e.phase===2);
+    if(d0){c.fillStyle='rgba(143,199,177,0.08)';c.fillRect(X(d0.t),pt,X(d1.t)-X(d0.t),h-pt-pb);}
+    series.forEach(s=>{c.strokeStyle=s.col;c.lineWidth=s.w||1.6;c.globalAlpha=s.a||1;c.beginPath();s.d.forEach((v,i)=>{const x=X(L[i].t),y=Y(clamp(v,lo,hi));i?c.lineTo(x,y):c.moveTo(x,y);});c.stroke();c.globalAlpha=1;});
+    let lx=pl+8; c.textAlign='left'; c.font='600 11px '+css('--body'); series.forEach(s=>{c.fillStyle=s.col;c.fillRect(lx,pt+4,12,3);c.fillText(s.n,lx+16,pt+9);lx+=c.measureText(s.n).width+34;});
+    chartImgs[id]={img:c.getImageData(0,0,cv.width,cv.height),X,w,h,pt,pb};
+  }
+  const ci=chartImgs[id], c=cv.getContext('2d'); c.putImageData(ci.img,0,0);
+  const x=ci.X(cursor); c.strokeStyle=css('--gold'); c.lineWidth=1.5; c.beginPath(); c.moveTo(x,ci.pt); c.lineTo(x,ci.h-ci.pb); c.stroke();
+}
+function drawCharts(i){ const L=M.log, t=L[i].t;
+  drawChart('cErr',[{d:L.map(e=>e.err),col:css('--mint'),n:'error'}],null,t);
+  drawChart('cWh',[{d:L.map(e=>e.wl),col:css('--blue'),n:'ωL'},{d:L.map(e=>e.wr),col:css('--gold'),n:'ωR'}],[-10.5,10.5],t);
+  drawChart('cVW',[{d:L.map(e=>e.v),col:css('--gold'),n:'v'},{d:L.map(e=>e.w),col:css('--mint'),n:'ω'}],null,t);
+  const loaded=pay===1;
+  drawChart('cTq',[{d:L.map(e=>e.tE[1]),col:css('--blue'),n:'empty 25 kg',a:loaded?0.55:1,w:loaded?1.2:2},{d:L.map(e=>e.tF[1]),col:css('--red'),n:'loaded 35 kg',a:loaded?1:0.55,w:loaded?2:1.2}],null,t);
+}
+
+// ---------------- summary panels ----------------
+const f=(v,n=2)=>v.toFixed(n);
+function fillSummary(){
+  const s=ST; document.getElementById('kT').innerHTML=f(s.T,1)+'<small>s</small>'; document.getElementById('kL').innerHTML=f(s.lenPlan,1)+'<small>m</small>';
+  document.getElementById('kE').innerHTML=f(s.rmsE*100,1)+'<small>cm</small>'; document.getElementById('kC').textContent=s.hits;
+  document.getElementById('sumNote').textContent=`Ward ${M.ward} round trip with ${M.mode==='pp'?'Pure Pursuit':'PID heading'} control.`;
+  const rows=[['Pharmacy → ward time',f(s.tArr,1),'s'],['Total round trip (incl. 3 s stop)',f(s.T,1),'s'],['Planned path length',f(s.lenPlan,2),'m'],['Actual distance driven',f(s.lenAct,2),'m'],
+    ['Tracking error RMS / max',f(s.rmsE,3)+' / '+f(s.maxE,3),'m'],['Peak wheel torque empty / loaded',f(s.pkE,2)+' / '+f(s.pkF,2),'N·m'],['RMS wheel torque empty / loaded',f(s.rmsTE,3)+' / '+f(s.rmsTF,3),'N·m'],
+    ['Torque increase with payload','+'+f((s.pkF/s.pkE-1)*100,0)+'%','peak'],['Max wheel speed',f(s.wmax,1),'rad/s']];
+  document.getElementById('resTbl').innerHTML='<tr><th>Measure</th><th class="num">Value</th><th>Unit</th></tr>'+rows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+  const rpm=s.wmax*60/(2*Math.PI), Pk=s.pkF*s.wmax, tS=s.pkF*1.5;
+  document.getElementById('chev').innerHTML=[['Peak torque (loaded)',f(s.pkF,2)+' N·m'],['Max wheel speed',f(rpm,0)+' rpm'],['Peak power τ·ω',f(Pk,1)+' W'],['× 1.5 safety',f(tS,2)+' N·m']].map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  const tPick=Math.ceil(tS*2)/2, rPick=Math.ceil(rpm/50)*50;
+  document.getElementById('pickTxt').textContent=`${tPick} N·m · ${rPick} rpm DC geared motor × 2`;
+  document.getElementById('pickNote').textContent=`≈ ${Math.ceil(Pk*1.5/5)*5} W each, with encoder. Cruise needs only ≈ ${f(invDyn(0,0,P.vmax,P.mE+P.mP)[1],2)} N·m; peaks come from starting, braking and turning.`;
+}
+function fillCompare(){
+  const pp=stats(mission(M.ward,'pp')).leg1, pid=stats(mission(M.ward,'pid')).leg1, mx2=Math.max(pp,pid)*1.15;
+  document.getElementById('cmpBars').innerHTML=[['Pure Pursuit',pp,css('--gold')],['PID heading',pid,css('--mint')]].map(([n,v,c])=>`<div class="bar"><span>${n}</span><div class="t"><div style="width:${v/mx2*100}%;background:${c}"></div></div><span class="num">${f(v,3)} m</span></div>`).join('')+
+  `<p class="note">RMS tracking error, pharmacy → Ward ${M.ward}. At indoor speeds the limits dominate, so both perform similarly; Pure Pursuit has one tuning parameter (L<sub>d</sub>) instead of three gains.</p>`;
+}
+
+// ---------------- telemetry + loop ----------------
+const el=id=>document.getElementById(id);
+function tele(i){ const e=M.log[i], tq=pay?e.tF:e.tE;
+  el('tV').innerHTML=f(e.v)+'<small>m/s</small>'; el('tW').innerHTML=f(e.w)+'<small>rad/s</small>';
+  el('tWL').innerHTML=f(e.wl,1)+'<small>rad/s</small>'; el('tWR').innerHTML=f(e.wr,1)+'<small>rad/s</small>';
+  el('tTL').innerHTML=f(tq[0])+'<small>N·m</small>'; el('tTR').innerHTML=f(tq[1])+'<small>N·m</small>';
+  el('tXY').textContent=f(e.x,1)+', '+f(e.y,1); el('tTh').textContent=Math.round(e.th*180/Math.PI)+'°';
+  el('tE').innerHTML=f(e.err,3)+'<small>m</small>'; el('tD').innerHTML=f(e.dist,1)+'<small>m</small>';
+  el('timePill').textContent='t = '+f(e.t,1)+' s'; el('prog').style.width=(i/(M.log.length-1)*100)+'%';
+  const pp=el('phasePill'); const done=i===M.log.length-1;
+  pp.className='pill '+(done?'done':e.phase===2?'wait':'go');
+  pp.textContent=done?'Back at pharmacy':e.phase===1?'Going to Ward '+M.ward:e.phase===2?'Delivering medicine…':'Returning to pharmacy';
+}
+let cur={ward:'B',mode:'pp'}, pay=1, M, ST, simT=0, playing=true, speed=2, last=null;
+function rebuild(){ M=mission(cur.ward,cur.mode); ST=stats(M); for(const k in chartImgs) delete chartImgs[k]; drawBase(); fillSummary(); fillCompare(); simT=0; playing=true; el('playBtn').textContent='Pause'; frame(0); }
+function idxAt(t){ const L=M.log; let lo=0,hi=L.length-1; while(lo<hi){const m=(lo+hi+1)>>1; if(L[m].t<=t)lo=m; else hi=m-1;} return lo; }
+function frame(i){ drawMap(i); drawCharts(i); tele(i); }
+function loop(ts){ if(last===null) last=ts; const dt=Math.min(0.1,(ts-last)/1000); last=ts;
+  if(playing){ simT+=dt*speed; const end=M.log[M.log.length-1].t; if(simT>=end){simT=end;playing=false;el('playBtn').textContent='Replay';} frame(idxAt(simT)); }
+  requestAnimationFrame(loop); }
+
+// ---------------- controls ----------------
+const segBind=(id,attr,fn)=>el(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;el(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));fn(b.dataset[attr]);});
+segBind('wardSeg','w',w=>{cur.ward=w;rebuild();});
+segBind('ctlSeg','c',c=>{cur.mode=c;rebuild();});
+segBind('paySeg','p',p=>{pay=+p;delete chartImgs.cTq;frame(idxAt(simT));});
+el('spd').addEventListener('input',e=>{speed=+e.target.value;el('spdV').textContent=speed+'×';});
+el('playBtn').addEventListener('click',()=>{ const end=M.log[M.log.length-1].t; if(!playing&&simT>=end) simT=0; playing=!playing; el('playBtn').textContent=playing?'Pause':'Play'; });
+el('resetBtn').addEventListener('click',()=>{simT=0;playing=true;el('playBtn').textContent='Pause';});
+let rt; addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{for(const k in chartImgs)delete chartImgs[k];frame(idxAt(simT));},150);});
+if(matchMedia('(prefers-reduced-motion: reduce)').matches) speed=4;
+
+const start=()=>{ rebuild(); requestAnimationFrame(loop); };
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(start);
+})();
+</script>
+
+</body>
+</html>
